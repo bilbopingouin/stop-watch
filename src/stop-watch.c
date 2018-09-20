@@ -149,7 +149,6 @@ void input_history(int x, int y)
 
   for (i=0;i<HISTORY_MAX;i++)
   {
-    /*printf("%d: %d\n",i,history_time[i].tv_sec);*/
     mvprintw (y+2+i, x+2, "%2d. %04d:%02d:%03d", i+1, history_time[i].tv_sec / 60 , history_time[i].tv_sec % 60 , history_time[i].tv_nsec / 1000000);
   }
 }
@@ -206,6 +205,7 @@ void input_commands_list(int x, int y)
   mvprintw(y+1,	x," <SPACE>: start/pause");
   mvprintw(y+2, x," r:       reset to 0");
   mvprintw(y+3, x," l:       lap");
+  mvprintw(y+4, x," s:       save history to file");
 }
 
 /***
@@ -217,6 +217,26 @@ void mark_pause(int x, int y, watch_status_typedef s)
     mvprintw (y, x, " === PAUSED === ");
   else
     mvprintw (y, x, "                ");
+}
+
+/***
+  * Save the history to a file
+  */
+void save_history(void)
+{
+  FILE *f = NULL;
+  int i;
+
+  f = fopen("history.dat","wt");
+  if (f)
+  {
+    fprintf(f, "# nb\tmin\ts\tms\n");
+    for (i=0;i<HISTORY_MAX;i++)
+    {
+      fprintf (f, "%2d\t%04d\t%02d\t%03d\n", i+1, history_time[i].tv_sec / 60 , history_time[i].tv_sec % 60 , history_time[i].tv_nsec / 1000000);
+    }
+    fclose(f);
+  }
 }
 
 //-- Main function ------------------
@@ -299,6 +319,12 @@ int main (int argc, char *argv[])
       else if ('l' == ch || 'L' == ch)
       {
 	refresh_history(now);
+      }
+      else if ('s' == ch || 'S' == ch)
+      {
+	save_history();
+        set_prompt();
+	printf("Data saved.");
       }
       else if (' ' == ch)
       {
