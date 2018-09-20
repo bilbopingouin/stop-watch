@@ -197,6 +197,28 @@ void input_clock(int x,int y, struct timespec now)
   refresh();
 }
 
+/***
+  * List the commands
+  */
+void input_commands_list(int x, int y)
+{
+  mvprintw(y,	x," <ESC>/q: leave  ");
+  mvprintw(y+1,	x," <SPACE>: start/pause");
+  mvprintw(y+2, x," r:       reset to 0");
+  mvprintw(y+3, x," l:       lap");
+}
+
+/***
+  * Mark the pause
+  */
+void mark_pause(int x, int y, watch_status_typedef s)
+{
+  if (s == WATCH_PAUSED)
+    mvprintw (y, x, " === PAUSED === ");
+  else
+    mvprintw (y, x, "                ");
+}
+
 //-- Main function ------------------
 
 int main (int argc, char *argv[])
@@ -222,7 +244,7 @@ int main (int argc, char *argv[])
 
   /* Watch presentation */
   mvprintw(0,1, "  ##  START-STOP WATCH  ##  ");
-  mvprintw(40,1,"  <ESC>/q: leave  | <SPACE>: start/pause | r: reset to 0");
+  input_commands_list(1,40);
 
   input_history(HISTORY_X,HISTORY_Y);
 
@@ -274,6 +296,10 @@ int main (int argc, char *argv[])
           input_clock(CLOCK_X,CLOCK_Y,now);
         }
       }
+      else if ('l' == ch || 'L' == ch)
+      {
+	refresh_history(now);
+      }
       else if (' ' == ch)
       {
         if (state == WATCH_RUN)
@@ -281,15 +307,14 @@ int main (int argc, char *argv[])
           refresh_history(now);
           //attron (A_STANDOUT);
           state = WATCH_PAUSED;
-          mvprintw (20, 20, "=== PAUSED ===");
           set_prompt();
         }
         else
         {
           //attroff (A_STANDOUT);
           state = WATCH_RUN;
-          mvprintw (20, 20, "              ");
         }
+	mark_pause(23,12,state);
         refresh();
       }
     }
