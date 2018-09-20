@@ -99,6 +99,17 @@ char *numbers_image [] =
 
 struct timespec history_time[HISTORY_MAX];
 
+int clock_x    = CLOCK_X;
+int clock_y    = CLOCK_Y;
+int history_x  = HISTORY_X;
+int history_y  = HISTORY_Y;
+int pause_x    = 0;
+int pause_y    = 0;
+int prompt_x   = 0;
+int prompt_y   = 0;
+int prev_cols  = 0;
+int prev_lines = 0;
+
 //-- Private functions --------------
 
 /***
@@ -153,9 +164,17 @@ void input_history(int x, int y)
   }
 }
 
-void set_prompt(void)
+void set_prompt(char *message)
 {
-  mvprintw (0,0,"");
+  if (message == NULL)
+  {
+    mvprintw (prompt_y,prompt_x,"                                ");
+    mvprintw (prompt_y,prompt_x,"");
+  }
+  else
+  {
+    mvprintw (prompt_y,prompt_x,"> %s",message);
+  }
   refresh();
 }
 
@@ -168,13 +187,11 @@ void refresh_history(struct timespec t)
   int i;
   for (i=HISTORY_MAX-1;i>0;--i)
   {
-    //printf("%d",i);
     history_time[i] = history_time[i-1];
   }
   history_time[0] = t;
-  //printf("\t%d",history_time[0].tv_sec);
-  input_history(HISTORY_X,HISTORY_Y);
-  set_prompt();
+  input_history(history_x,history_y);
+  set_prompt("Current time saved to history.");
   refresh();
 }
 
@@ -192,7 +209,7 @@ void input_clock(int x,int y, struct timespec now)
   input_nb(((now.tv_sec%60)/ 10)%10     ,x+32,y);
   input_nb((now.tv_sec )%10             ,x+39,y);
 
-  set_prompt();
+  set_prompt(NULL);
   refresh();
 }
 
@@ -201,22 +218,79 @@ void input_clock(int x,int y, struct timespec now)
   */
 void input_commands_list(int x, int y)
 {
-  mvprintw(y,	x," <ESC>/q: leave  ");
-  mvprintw(y+1,	x," <SPACE>: start/pause");
-  mvprintw(y+2, x," r:       reset to 0");
-  mvprintw(y+3, x," l:       lap");
-  mvprintw(y+4, x," s:       save history to file");
+  mvprintw (y,   x,"== Commands ====================");
+  mvprintw (y+1, x,"--------------------------------");
+  mvprintw (y+2, x,"  q:       leave		    ");
+  mvprintw (y+3, x,"  <SPACE>: start/pause	    ");
+  mvprintw (y+4, x,"  r:       reset to 0	    ");
+  mvprintw (y+5, x,"  l:       lap		    ");
+  mvprintw (y+6, x,"  s:       save history to file ");
+  set_prompt(NULL);
+}
+
+/***
+  * Print frame:
+  *
+  * Note that this expects the terminal to be at least
+  * 62 x 19
+  */
+void input_frame(void)
+{
+  int i;
+  int mid_x,mid_y;
+
+  clear();
+
+  prev_cols  = COLS;
+  prev_lines = LINES;
+
+  /* horizontal lines */
+  for (i=0;i<COLS;i++)
+  {
+    mvprintw (0,i,"=");
+    mvprintw (LINES-13,i,"=");
+  }
+
+  /* Top line */
+  mvprintw(0,2, "  ##  START-STOP WATCH  ##  ");
+  mvprintw(0,COLS-8, " v0.1 ");
+
+  /* Clock */
+  mid_x = COLS/2;
+  mid_y = (LINES-13-1)/2 + 2;
+  clock_x = mid_x - 22;
+  clock_y = mid_y - 3;
+
+  /* Pause */
+  pause_x = mid_x-7;
+  pause_y = mid_y-1;
+
+  /* Prompt */
+  prompt_x = 0;
+  prompt_y = LINES-1;
+
+  /* Commands */
+  input_commands_list(2,LINES-12);
+
+  /* History */
+  for (i=0;i<13;i++)
+  {
+    mvprintw (LINES-i,COLS-26,"|");
+  }
+  history_x = COLS-23;
+  history_y = LINES-12;
+  input_history(history_x,history_y);
 }
 
 /***
   * Mark the pause
   */
-void mark_pause(int x, int y, watch_status_typedef s)
+void mark_pause(watch_status_typedef s)
 {
   if (s == WATCH_PAUSED)
-    mvprintw (y, x, " === PAUSED === ");
+    mvprintw (pause_y, pause_x, " === PAUSED === ");
   else
-    mvprintw (y, x, "                ");
+    mvprintw (pause_y, pause_x, "                ");
 }
 
 /***
@@ -263,10 +337,9 @@ int main (int argc, char *argv[])
   delay.tv_nsec = 1000000;
 
   /* Watch presentation */
-  mvprintw(0,1, "  ##  START-STOP WATCH  ##  ");
-  input_commands_list(1,40);
+  input_frame();
+  //input_commands_list(1,40);
 
-  input_history(HISTORY_X,HISTORY_Y);
 
   /* Initialise some values */
   watch_status_typedef state = WATCH_RUN;
@@ -275,6 +348,11 @@ int main (int argc, char *argv[])
   /* Loop program */
   for (;;)
   {
+    if (is_term_resized(prev_lines,prev_cols) == TRUE)
+    {
+      input_frame();
+    }
+
     if (state == WATCH_RUN)
     {
       /* Calculate the current time since start */
@@ -283,7 +361,7 @@ int main (int argc, char *argv[])
       /* Update clock on each second */
       if (now.tv_sec != prev.tv_sec)
       {
-        input_clock(CLOCK_X,CLOCK_Y,now);
+        input_clock(clock_x,clock_y,now);
         prev = now;
       }
     }
@@ -297,7 +375,7 @@ int main (int argc, char *argv[])
     if (ERR != (ch = getch()))
     {
       /* Quit the application */
-      if (27 == ch || 'q' == ch || 'Q' == ch)
+      if (/*27 == ch ||*/ 'q' == ch || 'Q' == ch)
       {
         break;
       }
@@ -313,7 +391,7 @@ int main (int argc, char *argv[])
         {
           now.tv_sec = 0;
           now.tv_nsec = 0;
-          input_clock(CLOCK_X,CLOCK_Y,now);
+          input_clock(clock_x,clock_y,now);
         }
       }
       else if ('l' == ch || 'L' == ch)
@@ -323,8 +401,7 @@ int main (int argc, char *argv[])
       else if ('s' == ch || 'S' == ch)
       {
 	save_history();
-        set_prompt();
-	printf("Data saved.");
+        set_prompt("Data saved to file.");
       }
       else if (' ' == ch)
       {
@@ -333,14 +410,14 @@ int main (int argc, char *argv[])
           refresh_history(now);
           //attron (A_STANDOUT);
           state = WATCH_PAUSED;
-          set_prompt();
+          set_prompt("Timer paused.");
         }
         else
         {
           //attroff (A_STANDOUT);
           state = WATCH_RUN;
         }
-	mark_pause(23,12,state);
+	mark_pause(state);
         refresh();
       }
     }
