@@ -27,6 +27,8 @@ There are a few commands available within the application.
 - `l`       lap: save the current time to history
 - `s`       save history to file (`./history.dat`)
 
+Note that using `l`, `r` and `<space>` (when pausing) make a new entry in the history. 
+
 # Troubleshoot
     
 ### Compiation fail

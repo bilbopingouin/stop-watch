@@ -26,6 +26,13 @@ typedef enum {
   WATCH_RUN
 } watch_status_typedef;
 
+typedef enum {
+  LARGE,
+  SMALL,
+  SMALLER,
+  TINY
+} size_mode_typedef;
+
 //-- Private variables --------------
 
 char *numbers_image [] = 
@@ -110,6 +117,9 @@ int prompt_y   = 0;
 int prev_cols  = 0;
 int prev_lines = 0;
 
+size_mode_typedef height_mode = LARGE;
+size_mode_typedef width_mode  = LARGE;
+
 //-- Private functions --------------
 
 /***
@@ -155,8 +165,9 @@ void input_history(int x, int y)
 {
   int i;
   int yl = y;
+  int max = HISTORY_MAX;
 
-  if (LINES>18)
+  if (height_mode == LARGE)
   {
     mvprintw (yl,   x, "== Previous values ==");
     mvprintw (yl+1, x, "---------------------");
@@ -164,9 +175,10 @@ void input_history(int x, int y)
   else
   {
     yl = y-2;
+    max = 5;
   }
 
-  for (i=0;i<HISTORY_MAX;i++)
+  for (i=0;i<max;i++)
   {
     mvprintw (yl+2+i, x+2, "%2d. %04d:%02d:%03d", i+1, history_time[i].tv_sec / 60 , history_time[i].tv_sec % 60 , history_time[i].tv_nsec / 1000000);
   }
@@ -174,15 +186,25 @@ void input_history(int x, int y)
 
 void set_prompt(char *message)
 {
+  int i;
+  int max_cols = COLS;
+
   if (message == NULL)
   {
-    if (LINES>12)
-      mvprintw (prompt_y,prompt_x,"                                ");
+    if (height_mode == TINY || height_mode == SMALLER)
+      max_cols = COLS-25;
+
+    if (width_mode != TINY)
+    {
+      for (i=prompt_x;i<max_cols;i++)
+        mvprintw (prompt_y,i," ");
+    }
     mvprintw (prompt_y,prompt_x,"");
   }
   else
   {
-    mvprintw (prompt_y,prompt_x,"> %s",message);
+    if ((height_mode!=TINY && height_mode!=SMALLER) || (width_mode!=TINY && width_mode!=SMALLER))
+      mvprintw (prompt_y,prompt_x,"> %s",message);
   }
   refresh();
 }
@@ -212,7 +234,7 @@ void input_clock(struct timespec now)
   int shift_x = 22;
   int shift_y = 3;
 
-  if (COLS>46 && LINES>7)
+  if ( (width_mode==LARGE || width_mode==SMALL) && height_mode!=TINY )
   {
     input_nb((now.tv_sec / 36000)%10      ,clock_x-shift_x+0 ,clock_y-shift_y);
     input_nb((now.tv_sec / 3600)%10       ,clock_x-shift_x+7 ,clock_y-shift_y);
@@ -241,7 +263,7 @@ void input_commands_list(int x, int y)
 {
   int yl = y;
 
-  if (LINES>18)
+  if (height_mode == LARGE)
   {
     mvprintw (yl,   x,"== Commands ====================");
     mvprintw (yl+1, x,"--------------------------------");
@@ -251,7 +273,7 @@ void input_commands_list(int x, int y)
     yl = y-2;
   }
 
-  if (COLS>61)
+  if (width_mode == LARGE)
   {
     mvprintw (yl+2, x,"  q:       leave             ");
     mvprintw (yl+3, x,"  <SPACE>: start/pause       ");
@@ -261,11 +283,11 @@ void input_commands_list(int x, int y)
   }
   else
   {
-    mvprintw (yl+2, x,"  q:       leave             ");
-    mvprintw (yl+3, x,"  <SPACE>: pause             ");
-    mvprintw (yl+4, x,"  r:       reset             ");
-    mvprintw (yl+5, x,"  l:       lap               ");
-    mvprintw (yl+6, x,"  s:       save              ");
+    mvprintw (yl+2, x,"  q:       leave");
+    mvprintw (yl+3, x,"  <SPACE>: pause");
+    mvprintw (yl+4, x,"  r:       reset");
+    mvprintw (yl+5, x,"  l:       lap  ");
+    mvprintw (yl+6, x,"  s:       save ");
   }
   set_prompt(NULL);
 }
@@ -287,23 +309,52 @@ void input_frame(void)
   prev_cols  = COLS;
   prev_lines = LINES;
 
-  if (LINES<13)
+  if (LINES<8)
+  {
     bottom_y = 2;
-  else if (LINES<19)
-    bottom_y = 7;
+    height_mode = TINY;
+  }
+  else if (LINES<14)
+  {
+    bottom_y = 2;
+    height_mode = SMALLER;
+  }
+  else if (LINES<21)
+  {
+    bottom_y = 8;
+    height_mode = SMALL;
+  }
   else
-    bottom_y = 13;
+  {
+    bottom_y = 15;
+    height_mode = LARGE;
+  }
+
+  if (COLS<35)
+    width_mode = TINY;
+  else if (COLS<47)
+    width_mode = SMALLER;
+  else if (COLS<61)
+    width_mode = SMALL;
+  else
+    width_mode = LARGE;
+
 
   /* horizontal lines */
   for (i=0;i<COLS;i++)
   {
     mvprintw (0,i,"=");
     mvprintw (LINES-bottom_y,i,"=");
+    if (height_mode != TINY)
+      mvprintw (LINES-2,i,"=");
   }
 
   /* Top line */
-  mvprintw(0,2, "  ##  START-STOP WATCH  ##  ");
-  mvprintw(0,COLS-8, " v0.1 ");
+  if (width_mode == SMALL || width_mode == LARGE)
+  {
+    mvprintw(0,2, "  ##  START-STOP WATCH  ##  ");
+    mvprintw(0,COLS-8, " v0.1 ");
+  }
 
   /* Clock */
   mid_x = COLS/2;
@@ -320,11 +371,11 @@ void input_frame(void)
   prompt_y = LINES-1;
 
   /* Commands */
-  if (LINES>12)
+  if ( (height_mode != TINY && height_mode != SMALLER) && (width_mode != TINY && width_mode != SMALLER) )
     input_commands_list(2,LINES-bottom_y+1);
 
   /* History */
-  for (i=0;i<bottom_y;i++)
+  for (i=3;i<bottom_y;i++)
   {
     mvprintw (LINES-i,COLS-26,"|");
   }
@@ -338,10 +389,13 @@ void input_frame(void)
   */
 void mark_pause(watch_status_typedef s)
 {
+  int shift_x = 7;
+  int shift_y = 1;
+
   if (s == WATCH_PAUSED)
-    mvprintw (pause_y, pause_x, " === PAUSED === ");
+    mvprintw (pause_y-shift_y, pause_x-shift_x, " === PAUSED === ");
   else
-    mvprintw (pause_y, pause_x, "                ");
+    mvprintw (pause_y-shift_y, pause_x-shift_x, "                ");
 }
 
 /***
@@ -461,7 +515,7 @@ int main (int argc, char *argv[])
           refresh_history(now);
           //attron (A_STANDOUT);
           state = WATCH_PAUSED;
-          set_prompt("Timer paused.");
+          set_prompt("Timer paused.                 ");
         }
         else
         {
