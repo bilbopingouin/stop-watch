@@ -31,12 +31,22 @@ Note that using `l`, `r` and `<space>` (when pausing) make a new entry in the hi
 
 # Troubleshoot
     
-### Compiation fail
+### Compilation fail
 
 Note that it may fail if you don't have the ncurses libraries installed. Try installing the ncurses libraries
 
-    sudo apt-get install ncurses-base ncurses-bin ncurses-dev
+    sudo apt-get install build-essential ncurses-base ncurses-bin ncurses-dev
 
 and recompile.
+
+### File saving
+
+Make sure that you have the right to write in the current directory:
+
+    touch a
+    
+Make sure that the file isn't opened:
+
+    lsof | grep history.dat
 
 
