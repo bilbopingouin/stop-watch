@@ -154,13 +154,21 @@ void input_nb(int n, int x, int y)
 void input_history(int x, int y)
 {
   int i;
+  int yl = y;
 
-  mvprintw (y,   x, "== Previous values ==");
-  mvprintw (y+1, x, "---------------------");
+  if (LINES>18)
+  {
+    mvprintw (yl,   x, "== Previous values ==");
+    mvprintw (yl+1, x, "---------------------");
+  }
+  else
+  {
+    yl = y-2;
+  }
 
   for (i=0;i<HISTORY_MAX;i++)
   {
-    mvprintw (y+2+i, x+2, "%2d. %04d:%02d:%03d", i+1, history_time[i].tv_sec / 60 , history_time[i].tv_sec % 60 , history_time[i].tv_nsec / 1000000);
+    mvprintw (yl+2+i, x+2, "%2d. %04d:%02d:%03d", i+1, history_time[i].tv_sec / 60 , history_time[i].tv_sec % 60 , history_time[i].tv_nsec / 1000000);
   }
 }
 
@@ -168,7 +176,8 @@ void set_prompt(char *message)
 {
   if (message == NULL)
   {
-    mvprintw (prompt_y,prompt_x,"                                ");
+    if (LINES>12)
+      mvprintw (prompt_y,prompt_x,"                                ");
     mvprintw (prompt_y,prompt_x,"");
   }
   else
@@ -198,16 +207,28 @@ void refresh_history(struct timespec t)
 /***
   * Print the clock
   */
-void input_clock(int x,int y, struct timespec now)
+void input_clock(struct timespec now)
 {
-  input_nb((now.tv_sec / 36000)%10      ,x+0 ,y);
-  input_nb((now.tv_sec / 3600)%10       ,x+7,y);
-  input_nb(10                           ,x+13,y);
-  input_nb((((now.tv_sec/60)%60)/10)%10 ,x+16,y);
-  input_nb((now.tv_sec / 60)%10         ,x+23,y);
-  input_nb(10                           ,x+29,y);
-  input_nb(((now.tv_sec%60)/ 10)%10     ,x+32,y);
-  input_nb((now.tv_sec )%10             ,x+39,y);
+  int shift_x = 22;
+  int shift_y = 3;
+
+  if (COLS>46 && LINES>7)
+  {
+    input_nb((now.tv_sec / 36000)%10      ,clock_x-shift_x+0 ,clock_y-shift_y);
+    input_nb((now.tv_sec / 3600)%10       ,clock_x-shift_x+7 ,clock_y-shift_y);
+    input_nb(10                           ,clock_x-shift_x+13,clock_y-shift_y);
+    input_nb((((now.tv_sec/60)%60)/10)%10 ,clock_x-shift_x+16,clock_y-shift_y);
+    input_nb((now.tv_sec / 60)%10         ,clock_x-shift_x+23,clock_y-shift_y);
+    input_nb(10                           ,clock_x-shift_x+29,clock_y-shift_y);
+    input_nb(((now.tv_sec%60)/ 10)%10     ,clock_x-shift_x+32,clock_y-shift_y);
+    input_nb((now.tv_sec )%10             ,clock_x-shift_x+39,clock_y-shift_y);
+  }
+  else
+  {
+    shift_x = 5;
+    shift_y = 1;
+    mvprintw(clock_y-shift_y,clock_x-shift_x,"%04d:%02d:%02d",(now.tv_sec / 3600),(now.tv_sec / 60),(now.tv_sec%60));
+  }
 
   set_prompt(NULL);
   refresh();
@@ -218,13 +239,34 @@ void input_clock(int x,int y, struct timespec now)
   */
 void input_commands_list(int x, int y)
 {
-  mvprintw (y,   x,"== Commands ====================");
-  mvprintw (y+1, x,"--------------------------------");
-  mvprintw (y+2, x,"  q:       leave		    ");
-  mvprintw (y+3, x,"  <SPACE>: start/pause	    ");
-  mvprintw (y+4, x,"  r:       reset to 0	    ");
-  mvprintw (y+5, x,"  l:       lap		    ");
-  mvprintw (y+6, x,"  s:       save history to file ");
+  int yl = y;
+
+  if (LINES>18)
+  {
+    mvprintw (yl,   x,"== Commands ====================");
+    mvprintw (yl+1, x,"--------------------------------");
+  }
+  else
+  {
+    yl = y-2;
+  }
+
+  if (COLS>61)
+  {
+    mvprintw (yl+2, x,"  q:       leave             ");
+    mvprintw (yl+3, x,"  <SPACE>: start/pause       ");
+    mvprintw (yl+4, x,"  r:       reset to 0        ");
+    mvprintw (yl+5, x,"  l:       lap               ");
+    mvprintw (yl+6, x,"  s:       save history to file ");
+  }
+  else
+  {
+    mvprintw (yl+2, x,"  q:       leave             ");
+    mvprintw (yl+3, x,"  <SPACE>: pause             ");
+    mvprintw (yl+4, x,"  r:       reset             ");
+    mvprintw (yl+5, x,"  l:       lap               ");
+    mvprintw (yl+6, x,"  s:       save              ");
+  }
   set_prompt(NULL);
 }
 
@@ -232,23 +274,31 @@ void input_commands_list(int x, int y)
   * Print frame:
   *
   * Note that this expects the terminal to be at least
-  * 62 x 19
+  * 35 x 4
   */
 void input_frame(void)
 {
   int i;
   int mid_x,mid_y;
+  int bottom_y;
 
   clear();
 
   prev_cols  = COLS;
   prev_lines = LINES;
 
+  if (LINES<13)
+    bottom_y = 2;
+  else if (LINES<19)
+    bottom_y = 7;
+  else
+    bottom_y = 13;
+
   /* horizontal lines */
   for (i=0;i<COLS;i++)
   {
     mvprintw (0,i,"=");
-    mvprintw (LINES-13,i,"=");
+    mvprintw (LINES-bottom_y,i,"=");
   }
 
   /* Top line */
@@ -257,28 +307,29 @@ void input_frame(void)
 
   /* Clock */
   mid_x = COLS/2;
-  mid_y = (LINES-13-1)/2 + 2;
-  clock_x = mid_x - 22;
-  clock_y = mid_y - 3;
+  mid_y = (LINES-bottom_y-1)/2 + 2;
+  clock_x = mid_x;// - 22;
+  clock_y = mid_y;// - 3;
 
   /* Pause */
-  pause_x = mid_x-7;
-  pause_y = mid_y-1;
+  pause_x = mid_x;//-7;
+  pause_y = mid_y;//-1;
 
   /* Prompt */
   prompt_x = 0;
   prompt_y = LINES-1;
 
   /* Commands */
-  input_commands_list(2,LINES-12);
+  if (LINES>12)
+    input_commands_list(2,LINES-bottom_y+1);
 
   /* History */
-  for (i=0;i<13;i++)
+  for (i=0;i<bottom_y;i++)
   {
     mvprintw (LINES-i,COLS-26,"|");
   }
   history_x = COLS-23;
-  history_y = LINES-12;
+  history_y = LINES-bottom_y+1;
   input_history(history_x,history_y);
 }
 
@@ -361,7 +412,7 @@ int main (int argc, char *argv[])
       /* Update clock on each second */
       if (now.tv_sec != prev.tv_sec)
       {
-        input_clock(clock_x,clock_y,now);
+        input_clock(now);
         prev = now;
       }
     }
@@ -391,16 +442,16 @@ int main (int argc, char *argv[])
         {
           now.tv_sec = 0;
           now.tv_nsec = 0;
-          input_clock(clock_x,clock_y,now);
+          input_clock(now);
         }
       }
       else if ('l' == ch || 'L' == ch)
       {
-	refresh_history(now);
+        refresh_history(now);
       }
       else if ('s' == ch || 'S' == ch)
       {
-	save_history();
+        save_history();
         set_prompt("Data saved to file.");
       }
       else if (' ' == ch)
@@ -417,7 +468,7 @@ int main (int argc, char *argv[])
           //attroff (A_STANDOUT);
           state = WATCH_RUN;
         }
-	mark_pause(state);
+        mark_pause(state);
         refresh();
       }
     }
