@@ -21,19 +21,19 @@
 #define CLOCK_Y 10
 
 //-- Typedef ------------------------
-typedef enum
+enum watch_status
 {
   WATCH_PAUSED,
   WATCH_RUN
-} watch_status_typedef;
+};
 
-typedef enum
+enum size_mode
 {
   LARGE,
   SMALL,
   SMALLER,
   TINY
-} size_mode_typedef;
+};
 
 //-- Private variables --------------
 
@@ -59,21 +59,56 @@ char *numbers_image[] = {" #### ", "##  ##", "##  ##", "##  ##", " #### ",
 
                          "   ",    " # ",    "   ",    " # ",    "   "};
 
-struct timespec history_time[HISTORY_MAX];
+struct watch_parameters 
+{
+  int bottom_y;
 
-int clock_x = CLOCK_X;
-int clock_y = CLOCK_Y;
-int history_x = HISTORY_X;
-int history_y = HISTORY_Y;
-int pause_x = 0;
-int pause_y = 0;
-int prompt_x = 0;
-int prompt_y = 0;
-int prev_cols = 0;
-int prev_lines = 0;
+  struct {
+    int x, y;
+    struct timespec time[HISTORY_MAX];
+  } history;
 
-size_mode_typedef height_mode = LARGE;
-size_mode_typedef width_mode = LARGE;
+  struct 
+  {
+    int x, y;
+  } clock;
+
+  struct 
+  {
+    int x, y;
+  } pause;
+
+  struct 
+  {
+    int x, y;
+  } prompt;
+
+  struct
+  {
+    int x, y;
+  } commands;
+
+  struct
+  {
+    int cols;
+    int lines;
+  } prev;
+
+  struct
+  {
+    enum size_mode height;
+    enum size_mode width;
+  } mode;
+
+  struct 
+  {
+    struct timespec start;
+    struct timespec now;
+    struct timespec delay;
+  } times;
+
+  enum watch_status state;
+};
 
 //-- Private functions --------------
 
@@ -116,53 +151,53 @@ void input_nb(int n, int x, int y)
 /***
  * Print history
  */
-void input_history(int x, int y)
+void input_history(struct watch_parameters* watch)
 {
   int i;
-  int yl = y;
+  int yl = watch->history.y;
   int max = HISTORY_MAX;
 
-  if (height_mode == LARGE)
+  if (watch->mode.height == LARGE)
   {
-    mvprintw(yl, x, "== Previous values ==");
-    mvprintw(yl + 1, x, "---------------------");
+    mvprintw(yl, watch->history.x, "== Previous values ==");
+    mvprintw(yl + 1, watch->history.x, "---------------------");
   }
   else
   {
-    yl = y - 2;
+    yl = watch->history.y - 2;
     max = 5;
   }
 
   for (i = 0; i < max; i++)
   {
-    mvprintw(yl + 2 + i, x + 2, "%2d. %04d:%02d:%03d", i + 1,
-             history_time[i].tv_sec / 60, history_time[i].tv_sec % 60,
-             history_time[i].tv_nsec / 1000000);
+    mvprintw(yl + 2 + i, watch->history.x + 2, "%2d. %04d:%02d:%03d", i + 1,
+             watch->history.time[i].tv_sec / 60, watch->history.time[i].tv_sec % 60,
+             watch->history.time[i].tv_nsec / 1000000);
   }
 }
 
-void set_prompt(char *message)
+void set_prompt(struct watch_parameters* watch, char *message)
 {
   int i;
   int max_cols = COLS;
 
   if (message == NULL)
   {
-    if (height_mode == TINY || height_mode == SMALLER)
+    if (watch->mode.height == TINY || watch->mode.height == SMALLER)
       max_cols = COLS - 25;
 
-    if (width_mode != TINY)
+    if (watch->mode.width != TINY)
     {
-      for (i = prompt_x; i < max_cols; i++)
-        mvprintw(prompt_y, i, " ");
+      for (i = watch->prompt.x; i < max_cols; i++)
+        mvprintw(watch->prompt.y, i, " ");
     }
-    mvprintw(prompt_y, prompt_x, "");
+    mvprintw(watch->prompt.y, watch->prompt.x, "");
   }
   else
   {
-    if ((height_mode != TINY && height_mode != SMALLER) ||
-        (width_mode != TINY && width_mode != SMALLER))
-      mvprintw(prompt_y, prompt_x, "> %s", message);
+    if ((watch->mode.height != TINY && watch->mode.height != SMALLER) ||
+        (watch->mode.width != TINY && watch->mode.width != SMALLER))
+      mvprintw(watch->prompt.y, watch->prompt.x, "> %s", message);
   }
   refresh();
 }
@@ -171,88 +206,88 @@ void set_prompt(char *message)
  * Update the history table as well as
  * refreshing the screen values
  */
-void refresh_history(struct timespec t)
+void refresh_history(struct watch_parameters* watch)
 {
   int i;
   for (i = HISTORY_MAX - 1; i > 0; --i)
   {
-    history_time[i] = history_time[i - 1];
+    watch->history.time[i] = watch->history.time[i - 1];
   }
-  history_time[0] = t;
-  input_history(history_x, history_y);
-  set_prompt("Current time saved to history.");
+  watch->history.time[0] = watch->times.now;
+  input_history(watch);
+  set_prompt(watch, "Current time saved to history.");
   refresh();
 }
 
 /***
  * Print the clock
  */
-void input_clock(struct timespec now)
+void input_clock(struct watch_parameters* watch)
 {
   int shift_x = 22;
   int shift_y = 3;
 
-  if ((width_mode == LARGE || width_mode == SMALL) && height_mode != TINY)
+  if ((watch->mode.width == LARGE || watch->mode.width == SMALL) && watch->mode.height != TINY)
   {
-    input_nb((now.tv_sec / 36000) % 10, clock_x - shift_x + 0,
-             clock_y - shift_y);
-    input_nb((now.tv_sec / 3600) % 10, clock_x - shift_x + 7,
-             clock_y - shift_y);
-    input_nb(10, clock_x - shift_x + 13, clock_y - shift_y);
-    input_nb((((now.tv_sec / 60) % 60) / 10) % 10, clock_x - shift_x + 16,
-             clock_y - shift_y);
-    input_nb((now.tv_sec / 60) % 10, clock_x - shift_x + 23, clock_y - shift_y);
-    input_nb(10, clock_x - shift_x + 29, clock_y - shift_y);
-    input_nb(((now.tv_sec % 60) / 10) % 10, clock_x - shift_x + 32,
-             clock_y - shift_y);
-    input_nb((now.tv_sec) % 10, clock_x - shift_x + 39, clock_y - shift_y);
+    input_nb((watch->times.now.tv_sec / 36000) % 10, watch->clock.x - shift_x + 0,
+             watch->clock.y - shift_y);
+    input_nb((watch->times.now.tv_sec / 3600) % 10, watch->clock.x - shift_x + 7,
+             watch->clock.y - shift_y);
+    input_nb(10, watch->clock.x - shift_x + 13, watch->clock.y - shift_y);
+    input_nb((((watch->times.now.tv_sec / 60) % 60) / 10) % 10, watch->clock.x - shift_x + 16,
+             watch->clock.y - shift_y);
+    input_nb((watch->times.now.tv_sec / 60) % 10, watch->clock.x - shift_x + 23, watch->clock.y - shift_y);
+    input_nb(10, watch->clock.x - shift_x + 29, watch->clock.y - shift_y);
+    input_nb(((watch->times.now.tv_sec % 60) / 10) % 10, watch->clock.x - shift_x + 32,
+             watch->clock.y - shift_y);
+    input_nb((watch->times.now.tv_sec) % 10, watch->clock.x - shift_x + 39, watch->clock.y - shift_y);
   }
   else
   {
     shift_x = 5;
     shift_y = 1;
-    mvprintw(clock_y - shift_y, clock_x - shift_x, "%04d:%02d:%02d",
-             (now.tv_sec / 3600), (now.tv_sec / 60), (now.tv_sec % 60));
+    mvprintw(watch->clock.y - shift_y, watch->clock.x - shift_x, "%04d:%02d:%02d",
+             (watch->times.now.tv_sec / 3600), (watch->times.now.tv_sec / 60), (watch->times.now.tv_sec % 60));
   }
 
-  set_prompt(NULL);
+  set_prompt(watch, NULL);
   refresh();
 }
 
 /***
  * List the commands
  */
-void input_commands_list(int x, int y)
+void input_commands_list(struct watch_parameters* watch)
 {
-  int yl = y;
+  int yl = watch->commands.y;
 
-  if (height_mode == LARGE)
+  if (watch->mode.height == LARGE)
   {
-    mvprintw(yl, x, "== Commands ====================");
-    mvprintw(yl + 1, x, "--------------------------------");
+    mvprintw(yl, watch->commands.x, "== Commands ====================");
+    mvprintw(yl + 1, watch->commands.x, "--------------------------------");
   }
   else
   {
-    yl = y - 2;
+    yl = watch->commands.y - 2;
   }
 
-  if (width_mode == LARGE)
+  if (watch->mode.width == LARGE)
   {
-    mvprintw(yl + 2, x, "  q:       leave             ");
-    mvprintw(yl + 3, x, "  <SPACE>: start/pause       ");
-    mvprintw(yl + 4, x, "  r:       reset to 0        ");
-    mvprintw(yl + 5, x, "  l:       lap               ");
-    mvprintw(yl + 6, x, "  s:       save history to file ");
+    mvprintw(yl + 2, watch->commands.x, "  q:       leave             ");
+    mvprintw(yl + 3, watch->commands.x, "  <SPACE>: start/pause       ");
+    mvprintw(yl + 4, watch->commands.x, "  r:       reset to 0        ");
+    mvprintw(yl + 5, watch->commands.x, "  l:       lap               ");
+    mvprintw(yl + 6, watch->commands.x, "  s:       save history to file ");
   }
   else
   {
-    mvprintw(yl + 2, x, "  q:       leave");
-    mvprintw(yl + 3, x, "  <SPACE>: pause");
-    mvprintw(yl + 4, x, "  r:       reset");
-    mvprintw(yl + 5, x, "  l:       lap  ");
-    mvprintw(yl + 6, x, "  s:       save ");
+    mvprintw(yl + 2, watch->commands.x, "  q:       leave");
+    mvprintw(yl + 3, watch->commands.x, "  <SPACE>: pause");
+    mvprintw(yl + 4, watch->commands.x, "  r:       reset");
+    mvprintw(yl + 5, watch->commands.x, "  l:       lap  ");
+    mvprintw(yl + 6, watch->commands.x, "  s:       save ");
   }
-  set_prompt(NULL);
+  set_prompt(watch, NULL);
 }
 
 /***
@@ -261,137 +296,138 @@ void input_commands_list(int x, int y)
  * Note that this expects the terminal to be at least
  * 35 x 4
  */
-void get_height_mode(int *bottom_y)
+void get_height_mode(struct watch_parameters* watch)
 {
   if (LINES < 8)
   {
-    *bottom_y = 2;
-    height_mode = TINY;
+    watch->bottom_y = 2;
+    watch->mode.height = TINY;
   }
   else if (LINES < 14)
   {
-    *bottom_y = 2;
-    height_mode = SMALLER;
+    watch->bottom_y = 2;
+    watch->mode.height = SMALLER;
   }
   else if (LINES < 21)
   {
-    *bottom_y = 8;
-    height_mode = SMALL;
+    watch->bottom_y = 8;
+    watch->mode.height = SMALL;
   }
   else
   {
-    *bottom_y = 15;
-    height_mode = LARGE;
+    watch->bottom_y = 15;
+    watch->mode.height = LARGE;
   }
 }
 
-void get_width_mode(void)
+void get_width_mode(struct watch_parameters* watch)
 {
   if (COLS < 35)
-    width_mode = TINY;
+    watch->mode.width = TINY;
   else if (COLS < 47)
-    width_mode = SMALLER;
+    watch->mode.width = SMALLER;
   else if (COLS < 61)
-    width_mode = SMALL;
+    watch->mode.width = SMALL;
   else
-    width_mode = LARGE;
+    watch->mode.width = LARGE;
 }
 
-void draw_horizontal_lines(int bottom_y)
+void draw_horizontal_lines(struct watch_parameters* watch)
 {
   int i;
 
   for (i = 0; i < COLS; i++)
   {
     mvprintw(0, i, "=");
-    mvprintw(LINES - bottom_y, i, "=");
-    if (height_mode != TINY)
+    mvprintw(LINES - watch->bottom_y, i, "=");
+    if (watch->mode.height != TINY)
       mvprintw(LINES - 2, i, "=");
   }
 }
 
-void print_header(void)
+void print_header(struct watch_parameters* watch)
 {
-  if (width_mode == SMALL || width_mode == LARGE)
+  if (watch->mode.width == SMALL || watch->mode.width == LARGE)
   {
     mvprintw(0, 2, "  ##  START-STOP WATCH  ##  ");
     mvprintw(0, COLS - 8, " v0.1 ");
   }
 }
 
-void print_history(int bottom_y)
+void print_history(struct watch_parameters* watch)
 {
   int i;
-  for (i = 3; i < bottom_y; i++)
+  for (i = 3; i < watch->bottom_y; i++)
   {
     mvprintw(LINES - i, COLS - 26, "|");
   }
-  history_x = COLS - 23;
-  history_y = LINES - bottom_y + 1;
-  input_history(history_x, history_y);
+  watch->history.x = COLS - 23;
+  watch->history.y = LINES - watch->bottom_y + 1;
+  input_history(watch);
 }
 
-void input_frame(void)
+void input_frame(struct watch_parameters* watch)
 {
-  int i;
   int mid_x, mid_y;
-  int bottom_y;
 
   clear();
 
-  prev_cols = COLS;
-  prev_lines = LINES;
+  watch->prev.cols = COLS;
+  watch->prev.lines = LINES;
 
-  get_height_mode(&bottom_y);
-  get_width_mode();
+  get_height_mode(watch);
+  get_width_mode(watch);
 
   /* horizontal lines */
-  draw_horizontal_lines(bottom_y);
+  draw_horizontal_lines(watch);
 
   /* Top line */
-  print_header();
+  print_header(watch);
 
   /* Get Clock position */
   mid_x = COLS / 2;
-  mid_y = (LINES - bottom_y - 1) / 2 + 2;
-  clock_x = mid_x; // - 22;
-  clock_y = mid_y; // - 3;
+  mid_y = (LINES - watch->bottom_y - 1) / 2 + 2;
+  watch->clock.x = mid_x; // - 22;
+  watch->clock.y = mid_y; // - 3;
 
   /* Get Pause Position */
-  pause_x = mid_x; //-7;
-  pause_y = mid_y; //-1;
+  watch->pause.x = mid_x; //-7;
+  watch->pause.y = mid_y; //-1;
 
   /* Get Prompt position */
-  prompt_x = 0;
-  prompt_y = LINES - 1;
+  watch->prompt.x = 0;
+  watch->prompt.y = LINES - 1;
 
   /* Commands */
-  if ((height_mode != TINY && height_mode != SMALLER) &&
-      (width_mode != TINY && width_mode != SMALLER))
-    input_commands_list(2, LINES - bottom_y + 1);
+  if ((watch->mode.height != TINY && watch->mode.height != SMALLER) &&
+      (watch->mode.width != TINY && watch->mode.width != SMALLER))
+  {
+    watch->commands.y = LINES - watch->bottom_y + 1;
+    input_commands_list(watch);
+  }
 
   /* History */
-  print_history(bottom_y);
+  print_history(watch);
 }
 
 /***
  * Mark the pause
  */
-void mark_pause(watch_status_typedef s)
+void mark_pause(struct watch_parameters* watch)
 {
   int shift_x = 7;
   int shift_y = 1;
 
-  if (s == WATCH_PAUSED)
-    mvprintw(pause_y - shift_y, pause_x - shift_x, " === PAUSED === ");
+  if (watch->state == WATCH_PAUSED)
+    mvprintw(watch->pause.y - shift_y, watch->pause.x - shift_x, " === PAUSED === ");
   else
-    mvprintw(pause_y - shift_y, pause_x - shift_x, "                ");
+    mvprintw(watch->pause.y - shift_y, watch->pause.x - shift_x, "                ");
 }
 
 /***
  * Save the history to a file
  */
-void save_history(void)
+void save_history(struct watch_parameters* watch)
 {
   FILE *f = NULL;
   int i;
@@ -403,23 +439,45 @@ void save_history(void)
     for (i = 0; i < HISTORY_MAX; i++)
     {
       fprintf(f, "%2d\t%04ld\t%02ld\t%03ld\n", i + 1,
-              history_time[i].tv_sec / 60, history_time[i].tv_sec % 60,
-              history_time[i].tv_nsec / 1000000);
+              watch->history.time[i].tv_sec / 60, watch->history.time[i].tv_sec % 60,
+              watch->history.time[i].tv_nsec / 1000000);
     }
     fclose(f);
   }
 }
 
-void initialise_ncurses(void)
+void initialise_ncurses(struct watch_parameters* watch)
 {
+  int cnt;
+
   initscr();
   cbreak();
   noecho();
   nodelay(stdscr, TRUE);
+
+  watch->clock.x = CLOCK_X;
+  watch->clock.y = CLOCK_Y;
+  watch->history.x = HISTORY_X;
+  watch->history.y = HISTORY_Y;
+  watch->pause.x = 0;
+  watch->pause.y = 0;
+  watch->prompt.x = 0;
+  watch->prompt.y = 0;
+  watch->prev.cols = 0;
+  watch->prev.lines = 0;
+  watch->mode.height = LARGE;
+  watch->mode.width = LARGE;
+  watch->state = WATCH_RUN;
+  watch->commands.x = 2;
+
+  for (cnt=0 ; cnt<HISTORY_MAX ; ++cnt)
+  {
+    watch->history.time[cnt].tv_nsec = 0;
+    watch->history.time[cnt].tv_sec = 0;
+  }
 }
 
-bool ncurses_ui_stop(struct timespec *start, struct timespec *now,
-                     watch_status_typedef *state)
+bool ncurses_ui_stop(struct watch_parameters* watch)
 {
   int ch;
   if (ERR != (ch = getch()))
@@ -432,42 +490,42 @@ bool ncurses_ui_stop(struct timespec *start, struct timespec *now,
     /* Reset the values */
     else if ('r' == ch || 'R' == ch)
     {
-      if (*state == WATCH_RUN)
-        refresh_history(*now);
+      if (watch->state == WATCH_RUN)
+        refresh_history(watch);
 
-      clock_gettime(CLOCK_MONOTONIC, start);
+      clock_gettime(CLOCK_MONOTONIC, &(watch->times.start));
 
-      if (*state == WATCH_PAUSED)
+      if (watch->state == WATCH_PAUSED)
       {
-        now->tv_sec = 0;
-        now->tv_nsec = 0;
-        input_clock(*now);
+        watch->times.now.tv_sec = 0;
+        watch->times.now.tv_nsec = 0;
+        input_clock(watch);
       }
     }
     else if ('l' == ch || 'L' == ch)
     {
-      refresh_history(*now);
+      refresh_history(watch);
     }
     else if ('s' == ch || 'S' == ch)
     {
-      save_history();
-      set_prompt("Data saved to file.");
+      save_history(watch);
+      set_prompt(watch, "Data saved to file.");
     }
     else if (' ' == ch)
     {
-      if (*state == WATCH_RUN)
+      if (watch->state == WATCH_RUN)
       {
-        refresh_history(*now);
+        refresh_history(watch);
         // attron (A_STANDOUT);
-        *state = WATCH_PAUSED;
-        set_prompt("Timer paused.                 ");
+        watch->state = WATCH_PAUSED;
+        set_prompt(watch, "Timer paused.                 ");
       }
       else
       {
         // attroff (A_STANDOUT);
-        *state = WATCH_RUN;
+        watch->state = WATCH_RUN;
       }
-      mark_pause(*state);
+      mark_pause(watch);
       refresh();
     }
   }
@@ -475,55 +533,52 @@ bool ncurses_ui_stop(struct timespec *start, struct timespec *now,
   return false;
 }
 
-void ncurses_main(struct timespec *start)
+void ncurses_main(struct watch_parameters* watch)
 {
-  struct timespec now;
-
   /* Initialise some structures */
-  struct timespec delay;
-  delay.tv_sec = 0;
-  delay.tv_nsec = 1000000;
+  watch->times.delay.tv_sec = 0;
+  watch->times.delay.tv_nsec = 1000000;
 
   /* Watch presentation */
-  input_frame();
+  input_frame(watch);
 
   /* Initialise some values */
-  watch_status_typedef state = WATCH_RUN;
-  struct timespec prev = *start;
+  watch->state = WATCH_RUN;
+  struct timespec prev = watch->times.start;
 
   /* Loop program */
   for (;;)
   {
-    if (is_term_resized(prev_lines, prev_cols) == TRUE)
+    if (is_term_resized(watch->prev.lines, watch->prev.cols) == TRUE)
     {
-      input_frame();
+      input_frame(watch);
     }
 
-    if (state == WATCH_RUN)
+    if (watch->state == WATCH_RUN)
     {
       /* Calculate the current time since start */
-      subtract_time(&now, start);
+      subtract_time(&(watch->times.now), &(watch->times.start));
 
       /* Update clock on each second */
-      if (now.tv_sec != prev.tv_sec)
+      if (watch->times.now.tv_sec != prev.tv_sec)
       {
-        input_clock(now);
-        prev = now;
+        input_clock(watch);
+        prev = watch->times.now;
       }
     }
     else
     {
       /* Update the start value */
-      subtract_time(start, &now);
+      subtract_time(&(watch->times.start), &(watch->times.now));
     }
 
     /* Interaction */
-    if (true == ncurses_ui_stop(start, &now, &state))
+    if (true == ncurses_ui_stop(watch))
     {
       break;
     }
 
-    clock_nanosleep(CLOCK_MONOTONIC, 0, &delay, NULL);
+    clock_nanosleep(CLOCK_MONOTONIC, 0, &(watch->times.delay), NULL);
   }
 }
 
@@ -531,16 +586,16 @@ void ncurses_main(struct timespec *start)
 
 int main(int argc, char *argv[])
 {
-  struct timespec start;
+  struct watch_parameters watch;
 
   /* Start the timer */
-  clock_gettime(CLOCK_MONOTONIC, &start);
+  clock_gettime(CLOCK_MONOTONIC, &(watch.times.start));
 
   /* Initialise ncurses */
-  initialise_ncurses();
+  initialise_ncurses(&watch);
 
   /* Run the ncurses */
-  ncurses_main(&start);
+  ncurses_main(&watch);
 
   /* Stops the ncurses */
   endwin();
